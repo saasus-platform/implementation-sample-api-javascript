@@ -112,11 +112,11 @@ app.get('/tenant_attributes', async(request: Request, response: Response) => {
     const tenantInfo = (await client.tenantApi.getTenant(tenantId)).data
 
     const result: Record<string, any> = {};
-    tenantAttributes.tenant_attributes.forEach((tenantAttribute: any) => {
-      result[tenantAttribute.attributeName] = {
-        displayName: tenantAttribute.displayName,
-        attributeType: tenantAttribute.attributeType,
-        value: tenantInfo.attributes[tenantAttribute.attributeName] || null,
+    tenantAttributes.tenant_attributes.forEach((tenantAttribute) => {
+      result[tenantAttribute.attribute_name] = {
+        displayName: tenantAttribute.display_name,
+        attributeType: tenantAttribute.attribute_type,
+        value: tenantInfo.attributes[tenantAttribute.attribute_name] || null,
       }
     })
 
@@ -186,8 +186,8 @@ app.post('/user_register', async(request: Request, response: Response) => {
 
     // SaaSユーザー登録用パラメータを作成
     const createSaasUserParam: CreateSaasUserParam = {
-      email: email,
-      password: password
+      email,
+      password
     }
 
     // SaaSユーザーを登録
@@ -205,14 +205,7 @@ app.post('/user_register', async(request: Request, response: Response) => {
     const rolesObj = (await client.roleApi.getRoles()).data
 
     // 初期値はadmin（SaaS管理者）とする
-    let addRole = 'admin';
-
-    for (const role of rolesObj.roles) {
-      if (role.role_name === 'user') {
-        addRole = role.role_name;
-        break;
-      }
-    }
+    const addRole = rolesObj.roles.some(role => role.role_name === 'user') ? 'user' : 'admin'
 
     // ロール設定用のパラメータを作成
     const createTenantUserRolesParam: CreateTenantUserRolesParam = {
@@ -287,17 +280,10 @@ export interface DeleteUserLogResponse {
 }
 
 app.get('/delete_user_log', async (request: Request, response: Response) => {
-  let tenantId = request.query.tenant_id
+  const tenantId = request.query.tenant_id
 
   if (tenantId === undefined) {
       return response.status(400).json({ detail: 'No tenant' })
-  }
-
-  if (Array.isArray(tenantId)) {
-      tenantId = tenantId[0]
-  } 
-  else if (typeof tenantId === 'object' && tenantId !== null && 'id' in tenantId) {
-      tenantId = tenantId['id'] as string
   }
 
   if (typeof tenantId !== 'string') {
@@ -350,20 +336,13 @@ app.get('/pricing_plan', async (request: Request, response: Response) => {
     return response.status(400).json({ detail: 'No tenants found for the user' })
   }
 
-  let planId = request.query.plan_id
-  if (planId === undefined) {
-      return response.status(400).json({ detail: 'No tenant' })
-  }
-
-  if (Array.isArray(planId)) {
-    planId = planId[0]
-  } 
-  else if (typeof planId === 'object' && planId !== null && 'id' in planId) {
-    planId = planId['id'] as string
-  }
-
+  const planId = request.query.plan_id
   if (typeof planId !== 'string') {
       return response.status(400).json({ detail: 'Invalid tenant ID' });
+  }
+
+  if (!planId) {
+      return response.status(400).json({ detail: 'No price plan found for the tenant' });
   }
 
   // ユーザーにテナントが存在しない場合はエラー
