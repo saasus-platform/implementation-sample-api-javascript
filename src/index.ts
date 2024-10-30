@@ -81,10 +81,14 @@ app.get('/users', async (request: Request, response: Response) => {
     return
   }
 
-  const tenantId: string | undefined = request.query.tenant_id as string | undefined
+  const tenantId = request.query.tenant_id
   if (!tenantId) {
     response.status(400).send('TenantId not found')
     return
+  }
+
+  if (typeof tenantId !== 'string') {
+    return response.status(400).json({ detail: 'Invalid tenant ID' });
   }
 
   const client = new AuthClient()
@@ -99,10 +103,14 @@ app.get('/tenant_attributes', async(request: Request, response: Response) => {
     return
   }
 
-  const tenantId: string | undefined = request.query.tenant_id as string | undefined
+  const tenantId = request.query.tenant_id
   if (!tenantId) {
     response.status(400).send('TenantId not found')
     return
+  }
+
+  if (typeof tenantId !== 'string') {
+    return response.status(400).json({ detail: 'Invalid tenant ID' });
   }
 
   try {
