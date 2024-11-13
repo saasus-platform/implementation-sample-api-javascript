@@ -48,7 +48,7 @@ function belongingTenant(tenants: any[], tenantId: string): boolean {
   return tenants.some(tenant => tenant.id === tenantId);
 }
 
-app.use(['/userinfo', '/users', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan'], AuthMiddleware)
+app.use(['/userinfo', '/users', '/tenant_attributes', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan'], AuthMiddleware)
 
 app.get('/credentials', CallbackRouteFunction)
 
@@ -71,6 +71,7 @@ app.get('/refresh', async (request: Request, response: Response) => {
 })
 
 app.get('/userinfo', (request: Request, response: Response) => {
+  console.log(request.userInfo)
   response.send(request.userInfo)
 })
 
@@ -122,8 +123,8 @@ app.get('/tenant_attributes', async(request: Request, response: Response) => {
     const result: Record<string, any> = {};
     tenantAttributes.tenant_attributes.forEach((tenantAttribute) => {
       result[tenantAttribute.attribute_name] = {
-        displayName: tenantAttribute.display_name,
-        attributeType: tenantAttribute.attribute_type,
+        display_name: tenantAttribute.display_name,
+        attribute_type: tenantAttribute.attribute_type,
         value: tenantInfo.attributes[tenantAttribute.attribute_name] || null,
       }
     })
