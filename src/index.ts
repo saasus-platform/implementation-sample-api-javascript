@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser'
 import 'reflect-metadata'
 import { DataSource } from 'typeorm'
 import { DeleteUserLog } from './models/DeleteUserLog'
-import { CreateSaasUserParam, CreateTenantUserParam, CreateTenantUserRolesParam } from 'saasus-sdk/dist/generated/Auth'
+import { CreateSaasUserParam, CreateTenantUserParam, CreateTenantUserRolesParam, TenantProps } from 'saasus-sdk/dist/generated/Auth'
 
 const PORT = 80
 
@@ -48,7 +48,7 @@ function belongingTenant(tenants: any[], tenantId: string): boolean {
   return tenants.some(tenant => tenant.id === tenantId);
 }
 
-app.use(['/userinfo', '/users', '/tenant_attributes', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan'], AuthMiddleware)
+app.use(['/userinfo', '/users', '/tenant_attributes', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan', '/tenant_attributes_list', '/self_sign_up'], AuthMiddleware)
 
 app.get('/credentials', CallbackRouteFunction)
 
@@ -373,6 +373,116 @@ app.get('/pricing_plan', async (request: Request, response: Response) => {
       return response.status(500).json({ detail: error });
   }
 })
+
+app.get('/tenant_attributes_list', async (request: Request, response: Response) => {
+  const userInfo = request.userInfo
+  if (userInfo === undefined) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  try {
+    const client = new AuthClient()
+    const tenantAttributes = (await client.tenantAttributeApi.getTenantAttributes()).data
+    return response.json(tenantAttributes);
+  } catch (error) {
+      console.error(error);
+      return response.status(500).json({ detail: error });
+  }
+})
+
+export interface SelfSignUpRequest {
+  tenantName: string
+  tenantAttributeValues?: { [key: string]: any }
+  userAttributeValues?: { [key: string]: any }
+}
+
+app.post('/self_sign_up', async(request: Request, response: Response) => {
+  // リクエストデータの取得
+  const { tenantName, tenantAttributeValues, userAttributeValues }: SelfSignUpRequest = request.body;
+  if (!tenantName) {
+    return response.status(400).send({ message: 'Missing required fields' });
+  }
+
+  const userInfo = request.userInfo
+  if (userInfo === undefined) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  try {
+    // ユーザー属性情報を取得
+    const client = new AuthClient()
+
+    // テナント属性情報の取得
+    const tenantAttributesObj = (await client.tenantAttributeApi.getTenantAttributes()).data
+    const tenantAttributes = tenantAttributesObj.tenant_attributes
+    let tenantAttributeValuesCopy = tenantAttributeValues || {}
+
+    // テナント属性情報で number 型が定義されている場合は置換する
+    tenantAttributes.forEach((attribute) => {
+      const attributeName = attribute.attribute_name
+      const attributeType = attribute.attribute_type
+
+      if (tenantAttributeValuesCopy[attributeName] && attributeType === 'number') {
+        tenantAttributeValuesCopy[attributeName] = parseInt(tenantAttributeValuesCopy[attributeName], 10);
+      }
+    });
+    
+    // `TenantProps` のインスタンスを作成
+    const tenantProps: TenantProps = {
+      name: tenantName,
+      attributes: tenantAttributeValuesCopy,
+      back_office_staff_email: userInfo.email
+    }
+
+    // テナントを作成
+    const createdTenant = (await client.tenantApi.createTenant(tenantProps)).data
+
+    // 作成したテナントのIDを取得
+    const tenantId = createdTenant.id
+
+    // ユーザー属性情報の取得
+    const userAttributesObj = (await client.userAttributeApi.getUserAttributes()).data
+    const userAttributes = userAttributesObj.user_attributes
+    let userAttributeValuesCopy = userAttributeValues || {}
+
+    // ユーザー属性情報で number 型が定義されている場合は置換する
+    userAttributes.forEach((attribute) => {
+      const attributeName = attribute.attribute_name
+      const attributeType = attribute.attribute_type
+
+      if (userAttributeValuesCopy[attributeName] && attributeType === 'number') {
+        userAttributeValuesCopy[attributeName] = parseInt(userAttributeValuesCopy[attributeName], 10);
+      }
+    });
+
+    // テナントユーザー登録用のパラメータを作成
+    const createTenantUserParam: CreateTenantUserParam = {
+      email: userInfo.email,
+      attributes: userAttributeValuesCopy
+    }
+
+    // SaaSユーザーをテナントユーザーに追加
+    const tenantUser = (await client.tenantUserApi.createTenantUser(tenantId, createTenantUserParam)).data
+
+    // ロール設定用のパラメータを作成
+    const createTenantUserRolesParam: CreateTenantUserRolesParam = {
+      role_names: ['admin']
+    }
+
+    // 作成したテナントユーザーにロールを設定
+    await client.tenantUserApi.createTenantUserRoles(tenantId, tenantUser.id, 3, createTenantUserRolesParam)
+
+    response.json({ message: 'User successfully signed up to the tenant' });
+  } catch (error) {
+    console.error(error);
+    response.status(500).json({ detail: error });
+  }
+})
+
+app.post("/logout", (request: Request, response: Response) => {
+  response.clearCookie("SaaSusRefreshToken", { path: "/" });
+  response.json({ message: "Logged out successfully" });
+});
 
 app.listen(PORT, () => {
   console.log('Server running at PORT: ', PORT)
