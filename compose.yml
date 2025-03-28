@@ -1,11 +1,15 @@
 services:
-  node:
-    image: node:18
-    volumes:
-      - .:/app
-    working_dir: /app
+  db:
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      TZ: Asia/Tokyo
     ports:
-      - "80:8080"
-    env_file:
-      - .env
-    tty: true
+      - "5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
