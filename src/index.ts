@@ -486,24 +486,31 @@ app.post("/logout", (request: Request, response: Response) => {
 
 app.get('/invitations', async(request: Request, response: Response) => {
   try {
+    // ユーザーの所属テナント情報を取得
     const tenants = request.userInfo?.tenants
     if (!tenants) {
+      // ユーザーがテナントに所属していない場合はエラー
       response.status(400).send('No tenants found for the user')
       return
     }
 
+    // クエリパラメータからテナントIDを取得
     const tenantId = request.query.tenant_id
     if (!tenantId) {
+      // テナントIDが指定されていない場合はエラー
       response.status(400).send('TenantId not found')
       return
     }
 
     if (typeof tenantId !== 'string') {
+      // テナントIDが文字列でない場合はエラー
       return response.status(400).json({ detail: 'Invalid tenant ID' });
     }
 
+    // テナントの招待一覧を取得
     const client = new AuthClient()
     const invitations = (await client.invitationApi.getTenantInvitations(tenantId)).data.invitations
+    // 招待情報を返却
     response.send(invitations)
   } catch (error) {
     console.error(error)
