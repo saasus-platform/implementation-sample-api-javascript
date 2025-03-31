@@ -20,7 +20,7 @@ app.use(
   cors({
     origin: 'http://localhost:3000',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'X-Access-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'X-Access-Token', 'x-saasus-referer'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
 )
