@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser'
 import 'reflect-metadata'
 import { DataSource } from 'typeorm'
 import { DeleteUserLog } from './models/DeleteUserLog'
-import { CreateSaasUserParam, CreateTenantUserParam, CreateTenantUserRolesParam, TenantProps } from 'saasus-sdk/dist/generated/Auth'
+import { CreateSaasUserParam, CreateTenantUserParam, CreateTenantUserRolesParam, TenantProps, CreateTenantInvitationParam, InvitedUserEnvironmentInformationInner } from 'saasus-sdk/dist/generated/Auth'
 
 const PORT = 80
 
@@ -20,7 +20,7 @@ app.use(
   cors({
     origin: 'http://localhost:3000',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'X-Access-Token', 'x-saasus-referer'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
 )
@@ -48,7 +48,7 @@ function belongingTenant(tenants: any[], tenantId: string): boolean {
   return tenants.some(tenant => tenant.id === tenantId);
 }
 
-app.use(['/userinfo', '/users', '/tenant_attributes', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan', '/tenant_attributes_list', '/self_sign_up'], AuthMiddleware)
+app.use(['/userinfo', '/users', '/tenant_attributes', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan', '/tenant_attributes_list', '/self_sign_up', '/invitations', '/user_invitation'], AuthMiddleware)
 
 app.get('/credentials', CallbackRouteFunction)
 
@@ -483,6 +483,96 @@ app.post("/logout", (request: Request, response: Response) => {
   response.clearCookie("SaaSusRefreshToken", { path: "/" });
   response.json({ message: "Logged out successfully" });
 });
+
+app.get('/invitations', async(request: Request, response: Response) => {
+  try {
+    // ユーザーの所属テナント情報を取得
+    const tenants = request.userInfo?.tenants
+    if (!tenants) {
+      // ユーザーがテナントに所属していない場合はエラー
+      response.status(400).send('No tenants found for the user')
+      return
+    }
+
+    // クエリパラメータからテナントIDを取得
+    const tenantId = request.query.tenant_id
+    if (!tenantId) {
+      // テナントIDが指定されていない場合はエラー
+      response.status(400).send('TenantId not found')
+      return
+    }
+
+    if (typeof tenantId !== 'string') {
+      // テナントIDが文字列でない場合はエラー
+      return response.status(400).json({ detail: 'Invalid tenant ID' });
+    }
+
+    // テナントの招待一覧を取得
+    const client = new AuthClient()
+    const invitations = (await client.invitationApi.getTenantInvitations(tenantId)).data.invitations
+    // 招待情報を返却
+    response.send(invitations)
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
+  }
+})
+
+export interface UserInvitationRequest {
+  email: string
+  tenantId: string
+}
+
+app.post('/user_invitation', async(request: Request, response: Response) => {
+  const { email, tenantId }: UserInvitationRequest = request.body;
+  if (!email || !tenantId) {
+      return response.status(400).send({ message: 'Missing required fields' });
+  }
+
+  const userInfo = request.userInfo
+  if (userInfo === undefined) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  if (!userInfo.tenants) {
+    return response.status(400).json({ detail: 'No tenants found for the user' })
+  }
+
+  const isBelongingTenant = belongingTenant(userInfo.tenants, tenantId)
+  if (!isBelongingTenant) {
+    return response.status(400).json({ detail: 'Tenant that does not belong' })
+  }
+
+  try {
+    // 招待を作成するユーザーのアクセストークンを取得
+    const accessToken = request.header('X-Access-Token')
+
+    // アクセストークンがリクエストヘッダーに含まれていなかったらエラー
+    if (!accessToken) {
+      return response.status(401).json({ detail: 'Access token is missing' })
+    }
+
+    // テナント招待のパラメータを作成
+    const invitedUserEnvironmentInformationInner: InvitedUserEnvironmentInformationInner = {
+      id: 3,  // 本番環境のid:3を指定
+      role_names: ['admin']
+    }
+    const createTenantInvitationParam: CreateTenantInvitationParam = {
+      email: email,
+      access_token: accessToken,
+      envs: [invitedUserEnvironmentInformationInner]
+    }
+
+    // テナントへの招待を作成
+    const client = new AuthClient()
+    await client.invitationApi.createTenantInvitation(tenantId, createTenantInvitationParam)
+
+    response.json({ message: 'Create tenant user invitation successfully' })
+  } catch (error) {
+    console.error(error);
+    response.status(500).json({ detail: error });
+  }
+})
 
 app.listen(PORT, () => {
   console.log('Server running at PORT: ', PORT)
