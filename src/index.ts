@@ -8,7 +8,15 @@ import cookieParser from 'cookie-parser'
 import 'reflect-metadata'
 import { DataSource } from 'typeorm'
 import { DeleteUserLog } from './models/DeleteUserLog'
-import { CreateSaasUserParam, CreateTenantUserParam, CreateTenantUserRolesParam, TenantProps, CreateTenantInvitationParam, InvitedUserEnvironmentInformationInner } from 'saasus-sdk/dist/generated/Auth'
+import {
+  CreateSaasUserParam,
+  CreateTenantUserParam,
+  CreateTenantUserRolesParam,
+  TenantProps,
+  CreateTenantInvitationParam,
+  InvitedUserEnvironmentInformationInner,
+  MfaPreference,
+} from 'saasus-sdk/dist/generated/Auth'
 
 const PORT = 80
 
@@ -48,8 +56,28 @@ function belongingTenant(tenants: any[], tenantId: string): boolean {
   return tenants.some(tenant => tenant.id === tenantId);
 }
 
-app.use(['/userinfo', '/users', '/tenant_attributes', '/user_register', '/user_delete', '/delete_user_log', '/pricing_plan', '/tenant_attributes_list', '/self_sign_up', '/invitations', '/user_invitation'], AuthMiddleware)
-
+app.use(
+    [
+      '/userinfo',
+      '/users',
+      '/tenant_attributes',
+      '/user_register',
+      '/user_delete',
+      '/delete_user_log',
+      '/pricing_plan',
+      '/tenant_attributes_list',
+      '/self_sign_up',
+      '/invitations',
+      '/user_invitation',
+      '/mfa_status',
+      '/mfa_setup',
+      '/mfa_verify',
+      '/mfa_enable',
+      '/mfa_disable',
+    ],
+    AuthMiddleware
+  )
+  
 app.get('/credentials', CallbackRouteFunction)
 
 app.get('/refresh', async (request: Request, response: Response) => {
@@ -571,6 +599,139 @@ app.post('/user_invitation', async(request: Request, response: Response) => {
   } catch (error) {
     console.error(error);
     response.status(500).json({ detail: error });
+  }
+})
+
+// MFAステータス確認エンドポイント
+app.get('/mfa_status', async (request: Request, response: Response) => {
+  const userInfo = request.userInfo
+  if (!userInfo) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+  try {
+    // 認証クライアント初期化
+    const client = new AuthClient()
+    // ユーザー情報からMFA設定を取得
+    const userInfo = request.userInfo
+    if (userInfo === undefined) {
+        return response.status(400).json({ detail: 'No user' })
+    }
+    const mfaPref = (await client.saasUserApi.getUserMfaPreference(userInfo.id)).data
+    // enabled フラグを返す
+    response.json({ enabled: mfaPref.enabled })
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
+  }
+})
+
+// MFAシークレット作成エンドポイント
+app.get('/mfa_setup', async (request: Request, response: Response) => {
+    const userInfo = request.userInfo
+    if (!userInfo) {
+      return response.status(400).json({ detail: 'No user' })
+    }
+  try {
+    const client = new AuthClient()
+    const accessToken = request.header('X-Access-Token')
+
+    if (!accessToken) {
+      return response.status(401).json({ detail: 'Access token is missing' })
+    }
+
+    // シークレットコードを生成
+    const secretCode = (await client.saasUserApi.createSecretCode(userInfo.id, {
+      access_token: accessToken
+    })).data
+
+    // QRコード形式のURLを生成（Google Authenticator形式）
+    const qrCodeUrl = `otpauth://totp/SaaSusPlatform:${userInfo.email}?secret=${secretCode.secret_code}&issuer=SaaSusPlatform`
+
+    response.json({ qrCodeUrl })
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
+  }
+})
+
+// MFA認証コード検証エンドポイント
+export interface MfaVerifyRequest {
+  verification_code: string
+}
+
+app.post('/mfa_verify', async (request: Request, response: Response) => {
+  const userInfo = request.userInfo
+  if (!userInfo) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  try {
+    const client = new AuthClient()
+    const accessToken = request.header('X-Access-Token')
+    const { verification_code }: MfaVerifyRequest = request.body
+
+    if (!accessToken || !verification_code) {
+      return response.status(400).json({ detail: 'Missing verification_code or accessToken' })
+    }
+
+    // ソフトウェアトークンを検証して有効化
+    await client.saasUserApi.updateSoftwareToken(userInfo.id, {
+      access_token: accessToken,
+      verification_code: verification_code
+    })
+
+    response.json({ message: 'MFA verification successful' })
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
+  }
+})
+
+// MFA有効化エンドポイント
+app.post('/mfa_enable', async (request: Request, response: Response) => {
+  const userInfo = request.userInfo
+  if (!userInfo) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  try {
+    const client = new AuthClient()
+
+    // MFA設定を有効にする
+    const mfaPreference: MfaPreference = {
+      enabled: true,
+      method: 'softwareToken'
+    }
+    await client.saasUserApi.updateUserMfaPreference(userInfo.id, mfaPreference)
+
+    response.json({ message: 'MFA has been enabled' })
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
+  }
+})
+
+// MFA無効化エンドポイント
+app.post('/mfa_disable', async (request: Request, response: Response) => {
+  const userInfo = request.userInfo
+  if (!userInfo) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  try {
+    const client = new AuthClient()
+
+    // MFA設定を無効にする
+    const mfaPreference: MfaPreference = {
+      enabled: false,
+      method: 'softwareToken'
+    }
+    await client.saasUserApi.updateUserMfaPreference(userInfo.id,mfaPreference)
+
+    response.json({ message: 'MFA has been disabled' })
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
   }
 })
 
