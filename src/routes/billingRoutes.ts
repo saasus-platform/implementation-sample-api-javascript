@@ -322,6 +322,14 @@ router.get("/billing/plan_periods", async (req: Request, res: Response) => {
   }
 });
 
+// --- バリデーションヘルパー -------------------------------------------
+function validateMeteringRequest(method: string, count: number): string | null {
+  if (!["add", "sub", "direct"].includes(method) || count < 0) {
+    return "invalid method / count";
+  }
+  return null;
+}
+
 /**
  * POST /billing/metering/:tenantId/:unit/:ts
  * 指定タイムスタンプでのメータリング数を更新
@@ -336,8 +344,9 @@ router.post(
     };
 
     // メソッド & カウントのバリデーション
-    if (!["add", "sub", "direct"].includes(method) || count < 0) {
-      return res.status(400).json({ detail: "invalid method / count" });
+    const validationError = validateMeteringRequest(method, count);
+    if (validationError) {
+      return res.status(400).json({ detail: validationError });
     }
 
     try {
@@ -364,15 +373,16 @@ router.post(
 router.post(
   "/billing/metering/:tenantId/:unit",
   async (req: Request, res: Response) => {
-    const { tenantId, unit, ts } = req.params;
+    const { tenantId, unit } = req.params;
     const { method, count } = req.body as {
       method: "add" | "sub" | "direct";
       count: number;
     };
 
     // メソッド & カウントのバリデーション
-    if (!["add", "sub", "direct"].includes(method) || count < 0) {
-      return res.status(400).json({ detail: "invalid method / count" });
+    const validationError = validateMeteringRequest(method, count);
+    if (validationError) {
+      return res.status(400).json({ detail: validationError });
     }
 
     try {
