@@ -17,6 +17,7 @@ import {
   InvitedUserEnvironmentInformationInner,
   MfaPreference,
 } from 'saasus-sdk/dist/generated/Auth'
+import billingRoutes from './routes/billingRoutes'
 
 const PORT = 80
 
@@ -77,7 +78,7 @@ app.use(
     ],
     AuthMiddleware
   )
-  
+
 app.get('/credentials', CallbackRouteFunction)
 
 app.get('/refresh', async (request: Request, response: Response) => {
@@ -734,6 +735,8 @@ app.post('/mfa_disable', async (request: Request, response: Response) => {
     response.status(500).json({ detail: error })
   }
 })
+
+app.use('/', billingRoutes);
 
 app.listen(PORT, () => {
   console.log('Server running at PORT: ', PORT)
