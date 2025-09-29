@@ -400,4 +400,153 @@ router.post(
     }
   }
 );
+
+/**
+ * GET /pricing_plans
+ * 料金プラン一覧を取得
+ */
+router.get("/pricing_plans", async (req: Request, res: Response) => {
+  try {
+    const userInfo = req.userInfo;
+    if (!userInfo) {
+      return res.status(401).json({ detail: "No user" });
+    }
+
+    const pricingCli = new PricingClient();
+    const plans = (await pricingCli.pricingPlansApi.getPricingPlans()).data;
+    res.json(plans.pricing_plans);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ detail: "Internal server error" });
+  }
+});
+
+/**
+ * GET /tax_rates
+ * 税率一覧を取得
+ */
+router.get("/tax_rates", async (req: Request, res: Response) => {
+  try {
+    const userInfo = req.userInfo;
+    if (!userInfo) {
+      return res.status(401).json({ detail: "No user" });
+    }
+
+    const pricingCli = new PricingClient();
+    const taxRates = (await pricingCli.taxRateApi.getTaxRates()).data;
+    res.json(taxRates.tax_rates);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ detail: "Internal server error" });
+  }
+});
+
+/**
+ * GET /tenants/:tenant_id/plan
+ * テナントプラン情報を取得
+ */
+router.get("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.params.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ error: "tenant_id is required" });
+    }
+
+    const userInfo = req.userInfo;
+    if (!userInfo) {
+      return res.status(401).json({ error: "Internal server error" });
+    }
+
+    // 管理者権限チェック
+    if (!hasBillingAccess(userInfo, tenantId)) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+
+    const authCli = new AuthClient();
+    const tenant = (await authCli.tenantApi.getTenant(tenantId)).data;
+
+    // 現在のプランの税率情報を取得（プラン履歴の最新エントリから）
+    let currentTaxRateId: string | null = null;
+    if (tenant.plan_histories && tenant.plan_histories.length > 0) {
+      const latestPlanHistory = tenant.plan_histories[tenant.plan_histories.length - 1];
+      if (latestPlanHistory.tax_rate_id) {
+        currentTaxRateId = latestPlanHistory.tax_rate_id;
+      }
+    }
+
+    // レスポンスを構築
+    const response: any = {
+      id: tenant.id,
+      name: tenant.name,
+      plan_id: tenant.plan_id,
+      tax_rate_id: currentTaxRateId,
+      plan_reservation: null,
+    };
+
+    // 予約情報がある場合は追加（通常の予約または解除予約）
+    if (tenant.using_next_plan_from) {
+      const planReservation = {
+        next_plan_id: tenant.next_plan_id,
+        using_next_plan_from: tenant.using_next_plan_from,
+        next_plan_tax_rate_id: tenant.next_plan_tax_rate_id,
+      };
+      response.plan_reservation = planReservation;
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to retrieve tenant detail" });
+  }
+});
+
+/**
+ * PUT /tenants/:tenant_id/plan
+ * テナントプランを更新
+ */
+router.put("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.params.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ error: "tenant_id is required" });
+    }
+
+    const { next_plan_id, tax_rate_id, using_next_plan_from } = req.body;
+
+    const userInfo = req.userInfo;
+    if (!userInfo) {
+      return res.status(401).json({ error: "Internal server error" });
+    }
+
+    // 管理者権限チェック
+    if (!hasBillingAccess(userInfo, tenantId)) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+
+    const authCli = new AuthClient();
+
+    // テナントプランを更新
+    const updateTenantPlanParam: any = {
+      next_plan_id: next_plan_id,
+    };
+
+    // 税率IDが指定されている場合のみ設定
+    if (tax_rate_id && tax_rate_id !== "") {
+      updateTenantPlanParam.next_plan_tax_rate_id = tax_rate_id;
+    }
+
+    // using_next_plan_fromが指定されている場合のみ設定
+    if (using_next_plan_from && using_next_plan_from > 0) {
+      updateTenantPlanParam.using_next_plan_from = using_next_plan_from;
+    }
+
+    await authCli.tenantApi.updateTenantPlan(tenantId, updateTenantPlanParam);
+
+    res.json({ message: "Tenant plan updated successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update tenant plan" });
+  }
+});
+
 export default router;
