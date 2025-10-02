@@ -2,6 +2,25 @@ import { Router, Request, Response, NextFunction } from "express";
 import { AuthClient, AuthMiddleware, PricingClient } from "saasus-sdk";
 import type { PricingPlan } from "saasus-sdk/dist/generated/Pricing";
 
+// --- 型定義 -----------------------------------------------------------
+interface TenantPlanResponse {
+  id: string;
+  name: string;
+  plan_id: string | undefined;
+  tax_rate_id: string | null;
+  plan_reservation: {
+    next_plan_id: string | undefined;
+    using_next_plan_from: number;
+    next_plan_tax_rate_id: string | undefined;
+  } | null;
+}
+
+interface UpdateTenantPlanParam {
+  next_plan_id: string;
+  next_plan_tax_rate_id?: string;
+  using_next_plan_from?: number;
+}
+
 const router = Router();
 
 router.use(AuthMiddleware);
@@ -454,7 +473,7 @@ router.get("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
 
     const userInfo = req.userInfo;
     if (!userInfo) {
-      return res.status(401).json({ error: "Internal server error" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     // 管理者権限チェック
@@ -475,7 +494,7 @@ router.get("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
     }
 
     // レスポンスを構築
-    const response: any = {
+    const response: TenantPlanResponse = {
       id: tenant.id,
       name: tenant.name,
       plan_id: tenant.plan_id,
@@ -515,7 +534,7 @@ router.put("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
 
     const userInfo = req.userInfo;
     if (!userInfo) {
-      return res.status(401).json({ error: "Internal server error" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     // 管理者権限チェック
@@ -526,7 +545,7 @@ router.put("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
     const authCli = new AuthClient();
 
     // テナントプランを更新
-    const updateTenantPlanParam: any = {
+    const updateTenantPlanParam: UpdateTenantPlanParam = {
       next_plan_id: next_plan_id,
     };
 
