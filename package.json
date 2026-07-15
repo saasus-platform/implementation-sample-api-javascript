@@ -26,7 +26,7 @@
     "express": "^4.19.2",
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.2",
-    "saasus-sdk": "^1.3.2",
+    "saasus-sdk": "^1.13.2",
     "typeorm": "^0.3.20"
   }
 }
