@@ -74,6 +74,7 @@ app.use(
       '/mfa_setup',
       '/mfa_verify',
       '/mfa_enable',
+      '/mfa_email_enable',
       '/mfa_disable',
     ],
     AuthMiddleware
@@ -618,8 +619,8 @@ app.get('/mfa_status', async (request: Request, response: Response) => {
         return response.status(400).json({ detail: 'No user' })
     }
     const mfaPref = (await client.saasUserApi.getUserMfaPreference(userInfo.id)).data
-    // enabled フラグを返す
-    response.json({ enabled: mfaPref.enabled })
+    // enabled フラグと認証方式を返す
+    response.json({ enabled: mfaPref.enabled, method: mfaPref.method || null })
   } catch (error) {
     console.error(error)
     response.status(500).json({ detail: error })
@@ -688,7 +689,7 @@ app.post('/mfa_verify', async (request: Request, response: Response) => {
   }
 })
 
-// MFA有効化エンドポイント
+// MFA有効化エンドポイント（認証アプリ）
 app.post('/mfa_enable', async (request: Request, response: Response) => {
   const userInfo = request.userInfo
   if (!userInfo) {
@@ -698,7 +699,7 @@ app.post('/mfa_enable', async (request: Request, response: Response) => {
   try {
     const client = new AuthClient()
 
-    // MFA設定を有効にする
+    // MFA設定を認証アプリで有効にする
     const mfaPreference: MfaPreference = {
       enabled: true,
       method: 'softwareToken'
@@ -706,6 +707,30 @@ app.post('/mfa_enable', async (request: Request, response: Response) => {
     await client.saasUserApi.updateUserMfaPreference(userInfo.id, mfaPreference)
 
     response.json({ message: 'MFA has been enabled' })
+  } catch (error) {
+    console.error(error)
+    response.status(500).json({ detail: error })
+  }
+})
+
+// MFAメール認証有効化エンドポイント
+app.post('/mfa_email_enable', async (request: Request, response: Response) => {
+  const userInfo = request.userInfo
+  if (!userInfo) {
+    return response.status(400).json({ detail: 'No user' })
+  }
+
+  try {
+    const client = new AuthClient()
+
+    // MFA設定をメール認証で有効にする
+    const mfaPreference: MfaPreference = {
+      enabled: true,
+      method: 'email'
+    }
+    await client.saasUserApi.updateUserMfaPreference(userInfo.id, mfaPreference)
+
+    response.json({ message: 'Email MFA has been enabled' })
   } catch (error) {
     console.error(error)
     response.status(500).json({ detail: error })
