@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:13
-    restart: always
+    restart: "no"
     environment:
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
