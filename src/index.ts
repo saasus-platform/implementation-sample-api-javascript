@@ -2,7 +2,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 import express, { Request, Response } from 'express'
-import { AuthClient, AuthMiddleware, CallbackRouteFunction, PricingClient } from 'saasus-sdk'
+import { AuthMiddleware, CallbackRouteFunction } from 'saasus-sdk'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import 'reflect-metadata'
@@ -18,6 +18,7 @@ import {
   MfaPreference,
 } from 'saasus-sdk/dist/generated/Auth'
 import billingRoutes from './routes/billingRoutes'
+import { createAuthClient, createPricingClient } from './client-helpers'
 
 const PORT = 80
 
@@ -29,7 +30,7 @@ app.use(
   cors({
     origin: 'http://localhost:3000',
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'X-Access-Token', 'x-saasus-referer'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'X-Access-Token', 'x-saasus-referer', 'X-Saasus-Trace-Id'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   })
 )
@@ -89,7 +90,7 @@ app.get('/refresh', async (request: Request, response: Response) => {
     return
   }
 
-  const client = new AuthClient()
+  const client = createAuthClient(request)
   const credentials = (
     await client.credentialApi.getAuthCredentials(
       '',
@@ -122,7 +123,7 @@ app.get('/users', async (request: Request, response: Response) => {
     return response.status(400).json({ detail: 'Invalid tenant ID' });
   }
 
-  const client = new AuthClient()
+  const client = createAuthClient(request)
   const users = (await client.tenantUserApi.getTenantUsers(tenantId)).data.users
   response.send(users)
 })
@@ -145,7 +146,7 @@ app.get('/tenant_attributes', async(request: Request, response: Response) => {
   }
 
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const tenantAttributes = (await client.tenantAttributeApi.getTenantAttributes()).data
 
     const tenantInfo = (await client.tenantApi.getTenant(tenantId)).data
@@ -169,7 +170,7 @@ app.get('/tenant_attributes', async(request: Request, response: Response) => {
 
 app.get('/user_attributes', async(request: Request, response: Response) => {
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const userAttributes = (await client.userAttributeApi.getUserAttributes()).data
     
     response.json(userAttributes);
@@ -208,7 +209,7 @@ app.post('/user_register', async(request: Request, response: Response) => {
 
   try {
     // ユーザー属性情報を取得
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const userAttributesObj = (await client.userAttributeApi.getUserAttributes()).data
 
     let userAttributeValuesCopy = userAttributeValues || {}
@@ -289,7 +290,7 @@ app.delete('/user_delete', async (request: Request, response: Response) => {
 
   try {
       // SaaSusからユーザー情報を取得
-      const client = new AuthClient()
+      const client = createAuthClient(request)
       const deleteUser = (await client.tenantUserApi.getTenantUser(tenantId, userId)).data
 
       // テナントからユーザー情報を削除
@@ -395,7 +396,7 @@ app.get('/pricing_plan', async (request: Request, response: Response) => {
   }
 
   try {
-    const client = new PricingClient()
+    const client = createPricingClient(request)
     const plan = (await client.pricingPlansApi.getPricingPlan(planId)).data
     return response.json(plan);
   } catch (error) {
@@ -411,7 +412,7 @@ app.get('/tenant_attributes_list', async (request: Request, response: Response) 
   }
 
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const tenantAttributes = (await client.tenantAttributeApi.getTenantAttributes()).data
     return response.json(tenantAttributes);
   } catch (error) {
@@ -440,7 +441,7 @@ app.post('/self_sign_up', async(request: Request, response: Response) => {
 
   try {
     // ユーザー属性情報を取得
-    const client = new AuthClient()
+    const client = createAuthClient(request)
 
     // テナント属性情報の取得
     const tenantAttributesObj = (await client.tenantAttributeApi.getTenantAttributes()).data
@@ -538,7 +539,7 @@ app.get('/invitations', async(request: Request, response: Response) => {
     }
 
     // テナントの招待一覧を取得
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const invitations = (await client.invitationApi.getTenantInvitations(tenantId)).data.invitations
     // 招待情報を返却
     response.send(invitations)
@@ -594,7 +595,7 @@ app.post('/user_invitation', async(request: Request, response: Response) => {
     }
 
     // テナントへの招待を作成
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     await client.invitationApi.createTenantInvitation(tenantId, createTenantInvitationParam)
 
     response.json({ message: 'Create tenant user invitation successfully' })
@@ -612,7 +613,7 @@ app.get('/mfa_status', async (request: Request, response: Response) => {
   }
   try {
     // 認証クライアント初期化
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     // ユーザー情報からMFA設定を取得
     const userInfo = request.userInfo
     if (userInfo === undefined) {
@@ -634,7 +635,7 @@ app.get('/mfa_setup', async (request: Request, response: Response) => {
       return response.status(400).json({ detail: 'No user' })
     }
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const accessToken = request.header('X-Access-Token')
 
     if (!accessToken) {
@@ -668,7 +669,7 @@ app.post('/mfa_verify', async (request: Request, response: Response) => {
   }
 
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
     const accessToken = request.header('X-Access-Token')
     const { verification_code }: MfaVerifyRequest = request.body
 
@@ -697,7 +698,7 @@ app.post('/mfa_enable', async (request: Request, response: Response) => {
   }
 
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
 
     // MFA設定を認証アプリで有効にする
     const mfaPreference: MfaPreference = {
@@ -721,7 +722,7 @@ app.post('/mfa_email_enable', async (request: Request, response: Response) => {
   }
 
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
 
     // MFA設定をメール認証で有効にする
     const mfaPreference: MfaPreference = {
@@ -745,7 +746,7 @@ app.post('/mfa_disable', async (request: Request, response: Response) => {
   }
 
   try {
-    const client = new AuthClient()
+    const client = createAuthClient(request)
 
     // MFA設定を無効にする
     const mfaPreference: MfaPreference = {

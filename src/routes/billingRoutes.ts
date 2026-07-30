@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { AuthClient, AuthMiddleware, PricingClient } from "saasus-sdk";
+import { AuthMiddleware, PricingClient } from "saasus-sdk";
 import type { PricingPlan } from "saasus-sdk/dist/generated/Pricing";
+import { createAuthClient, createPricingClient } from "../client-helpers";
 
 // --- 型定義 -----------------------------------------------------------
 interface TenantPlanResponse {
@@ -187,8 +188,8 @@ router.get('/billing/dashboard', async (req: Request, res: Response) => {
     if (!userInfo) return res.status(401).json({ message: 'Unauthenticated' });
 
     // SDK クライアント生成
-    const authCli = new AuthClient();
-    const pricingCli = new PricingClient();
+    const authCli = createAuthClient(req);
+    const pricingCli = createPricingClient(req);
 
     // クエリパラメータ
     const tenantId = String(req.query.tenant_id);
@@ -262,8 +263,8 @@ router.get("/billing/plan_periods", async (req: Request, res: Response) => {
     }
 
     // SDK 呼び出し準備
-    const authCli = new AuthClient();
-    const pricingCli = new PricingClient();
+    const authCli = createAuthClient(req);
+    const pricingCli = createPricingClient(req);
 
     // テナント情報取得
     const tenant = (await authCli.tenantApi.getTenant(tenantId)).data;
@@ -369,7 +370,7 @@ router.post(
     }
 
     try {
-      const pricingCli = new PricingClient();
+      const pricingCli = createPricingClient(req);
       const resp =
         await pricingCli.meteringApi.updateMeteringUnitTimestampCount(
           tenantId,
@@ -405,7 +406,7 @@ router.post(
     }
 
     try {
-      const pricingCli = new PricingClient();
+      const pricingCli = createPricingClient(req);
       const resp =
         await pricingCli.meteringApi.updateMeteringUnitTimestampCountNow(
           tenantId,
@@ -431,7 +432,7 @@ router.get("/pricing_plans", async (req: Request, res: Response) => {
       return res.status(401).json({ detail: "No user" });
     }
 
-    const pricingCli = new PricingClient();
+    const pricingCli = createPricingClient(req);
     const plans = (await pricingCli.pricingPlansApi.getPricingPlans()).data;
     res.json(plans.pricing_plans);
   } catch (error) {
@@ -451,7 +452,7 @@ router.get("/tax_rates", async (req: Request, res: Response) => {
       return res.status(401).json({ detail: "No user" });
     }
 
-    const pricingCli = new PricingClient();
+    const pricingCli = createPricingClient(req);
     const taxRates = (await pricingCli.taxRateApi.getTaxRates()).data;
     res.json(taxRates.tax_rates);
   } catch (error) {
@@ -481,7 +482,7 @@ router.get("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
 
-    const authCli = new AuthClient();
+    const authCli = createAuthClient(req);
     const tenant = (await authCli.tenantApi.getTenant(tenantId)).data;
 
     // 現在のプランの税率情報を取得（プラン履歴の最新エントリから）
@@ -542,7 +543,7 @@ router.put("/tenants/:tenant_id/plan", async (req: Request, res: Response) => {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
 
-    const authCli = new AuthClient();
+    const authCli = createAuthClient(req);
 
     // テナントプランを更新
     const updateTenantPlanParam: UpdateTenantPlanParam = {
